@@ -11,16 +11,17 @@ extern crate serde;
 extern crate std;
 
 mod config;
-mod handlers;
 mod options;
 mod slogger;
 
 use actix_slog::StructuredLogger;
-use actix_web::{middleware::Compress, web, App, HttpServer};
-use handlers::{
-    backend_info, check_blob, check_manifest, download_manifest, init_upload, monolithic_upload,
-    status_upload, upload_manifest, v2, AppState,
-};
+use actix_web::{web, App, HttpServer};
+use handlers::base::v2;
+use handlers::blob::{check_blob, delete_blob, fetch_blob};
+use handlers::init_blob_upload::init_upload;
+use handlers::manifest::{delete_manifest, get_manifest, head_manifest, put_manifest};
+use handlers::tags::tags_list;
+use handlers::AppState;
 use options::Options;
 use storage::factory as StorageFactory;
 use structopt::StructOpt;
@@ -42,22 +43,28 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .data(AppState {
                 logger: location_logger.clone(),
-                config: config.clone(),
+                // config: config.clone(),
                 backend: backend.clone(),
             })
             .data(config.clone())
-            .wrap(Compress::default())
             .wrap(StructuredLogger::new(logger.new(o!())))
             .service(
                 web::scope("/v2")
+                    // tags
+                    .service(tags_list)
+                    // manifest
+                    .service(get_manifest)
+                    .service(head_manifest)
+                    .service(put_manifest)
+                    .service(delete_manifest)
+                    // blob
                     .service(check_blob)
+                    .service(fetch_blob)
+                    .service(delete_blob)
+                    // init upload
                     .service(init_upload)
-                    .service(status_upload)
-                    .service(upload_manifest)
-                    .service(monolithic_upload)
-                    .service(download_manifest)
-                    .service(check_manifest)
-                    .service(backend_info)
+                    // TODO: upload hanlers
+                    //
                     .route("/", web::to(v2)),
             )
     })
