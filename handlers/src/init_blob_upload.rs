@@ -18,22 +18,26 @@ pub async fn init_upload(
         mount_from.is_empty(),
     );
     match conditions {
-        (true, true, true) => monolithic_upload(data, name.clone(), digest),
-        (false, true, true) => resumable_upload(data, name.clone()),
-        (false, false, false) => mount_blob(),
+        (false, true, true) => monolithic_upload(data, name.clone(), digest),
+        (true, true, true) => resumable_upload(data, name.clone()),
+        (true, false, false) => mount_blob(data, mount_from, mount_digest),
         _ => bad_init_upload(),
     }
 }
 
 fn monolithic_upload(data: web::Data<AppState>, name: String, digest: String) -> HttpResponse {
-    info!(
-        data.logger,
-        "[BLOB.INIT.MONOLITHIC_UPLOAD]";"name"=>&name.clone(), "digest"=>digest.clone(),
-    );
-
     // TODO: get Content-Length
     let id = Uuid::new_v4().to_string();
     let location = format!("/v2/{}/blobs/uploads/{}", name, id);
+
+    info!(
+        data.logger,
+        "[BLOB.INIT.MONOLITHIC_UPLOAD]";
+        "name"=>&name.clone(),
+        "digest"=>digest.clone(),
+        "session"=>id.clone(),
+    );
+
     debug!(
         data.logger,"[BLOB.INIT.MONOLITHIC_UPLOAD]";
         "location"=>location.clone(),
@@ -58,7 +62,11 @@ fn resumable_upload(data: web::Data<AppState>, name: String) -> HttpResponse {
         .body("")
 }
 
-fn mount_blob() -> HttpResponse {
+fn mount_blob(data: web::Data<AppState>, from: String, digest: String) -> HttpResponse {
+    info!(data.logger, "[BLOB.INIT.MOUNT]";
+    "from"=>from,
+    "digest"=>digest
+    );
     HttpResponse::Ok().body("")
 }
 

@@ -19,6 +19,7 @@ use actix_web::{middleware, web, App, HttpServer};
 use actix_web_prom::PrometheusMetricsBuilder;
 use handlers::base::v2;
 use handlers::blob::{check_blob, delete_blob, fetch_blob};
+use handlers::blob_upload::{delete_upload, finish_upload, status_upload, stream_upload};
 use handlers::init_blob_upload::init_upload;
 use handlers::manifest::{delete_manifest, get_manifest, head_manifest, put_manifest};
 use handlers::tags::tags_list;
@@ -88,6 +89,10 @@ async fn main() -> std::io::Result<()> {
                     // init upload
                     .service(init_upload)
                     // TODO: upload hanlers
+                    .service(status_upload)
+                    .service(stream_upload)
+                    .service(finish_upload)
+                    .service(delete_upload)
                     //
                     .route("/", web::to(v2)),
             )

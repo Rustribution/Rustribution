@@ -10,6 +10,7 @@ use storage::backend::BlobBackend;
 
 pub mod base;
 pub mod blob;
+pub mod blob_upload;
 pub mod init_blob_upload;
 pub mod manifest;
 pub mod media_types;
@@ -17,6 +18,7 @@ pub mod tags;
 
 pub static DISTRIBUTION_API_VERSION: &str = "Docker-Distribution-Api-Version";
 pub static RUSTRIBUTION_VERSION: &str = "Rustribution-Version";
+pub static DOCKER_UPLOAD_UUID: &str = "Docker-Upload-UUID";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -37,13 +39,13 @@ pub struct NameDigest {
     digest: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct NameUUID {
     name: String,
     uuid: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct QueryDigest {
     digest: Option<String>,
 }
