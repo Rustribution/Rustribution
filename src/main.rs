@@ -24,6 +24,7 @@ use handlers::manifest::{delete_manifest, get_manifest, head_manifest, put_manif
 use handlers::tags::tags_list;
 use handlers::{AppState, DISTRIBUTION_API_VERSION, RUSTRIBUTION_VERSION};
 use options::Options;
+use slog::Logger;
 use storage::factory as StorageFactory;
 use structopt::StructOpt;
 
@@ -33,19 +34,26 @@ async fn main() -> std::io::Result<()> {
     let config = config::parse(opt.config).unwrap();
 
     let logger = slogger::init();
-    let location_logger = slogger::with_location(logger.clone());
-    debug!(location_logger,"";"storage.backend_type"=>config.clone().storage.backend_type);
+    let mut location_logger = slogger::with_location(logger.clone());
+    location_logger = Logger::root(
+        location_logger,
+        o!(
+            "environment"=>config.log.environment.clone().unwrap_or(String::from("development")),
+            "service"=>config.log.service.clone().unwrap_or(String::from("rustribution")),
+        ),
+    );
+    debug!(location_logger,"";"storage.backend_type"=>config.storage.clone().backend_type);
 
-    let backend = StorageFactory::new_backend(config.clone().storage, location_logger.clone())?;
+    let backend = StorageFactory::new_backend(config.storage.clone(), location_logger.clone())?;
     info!(location_logger, "backend info {}", backend.info());
 
     // default metrics
     let prometheus = PrometheusMetricsBuilder::new("api")
-        .endpoint(&config.clone().http.prometheus.unwrap().path)
+        .endpoint(&config.http.prometheus.clone().unwrap().path)
         .build()
         .unwrap();
 
-    let cfg = config.clone();
+    let addr = config.http.addr.clone();
     HttpServer::new(move || {
         App::new()
             .data(AppState {
@@ -84,7 +92,7 @@ async fn main() -> std::io::Result<()> {
                     .route("/", web::to(v2)),
             )
     })
-    .bind(cfg.http.addr)?
+    .bind(addr)?
     .run()
     .await
 }

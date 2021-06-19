@@ -33,8 +33,3 @@ pub fn with_location(logger: Logger) -> Logger {
     ),
   )
 }
-
-// /// Record log_type
-// pub fn with_logtype(logger: Logger, logtype: String) -> Logger {
-//   Logger::root(logger, o!("logtype", logger))
-// }

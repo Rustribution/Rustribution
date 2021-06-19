@@ -1,4 +1,3 @@
-use std::collections::BTreeMap as Map;
 use std::fs::File;
 use std::io::{self, Read};
 use storage::backend::StorageCfg;
@@ -16,7 +15,8 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct LogCfg {
     pub level: LogLevel,
-    pub fields: Map<String, String>,
+    pub environment: Option<String>,
+    pub service: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -35,19 +35,6 @@ pub enum LogLevel {
     #[serde(rename = "trace")]
     Trace,
 }
-
-// impl LogLevel {
-//     pub fn as_filter(&self) -> LevelFilter {
-//         match self {
-//             LogLevel::Error => LevelFilter::Error,
-//             LogLevel::Warn => LevelFilter::Warn,
-//             LogLevel::Info => LevelFilter::Info,
-//             LogLevel::Debug => LevelFilter::Debug,
-//             LogLevel::Trace => LevelFilter::Trace,
-//             _ => LevelFilter::Off,
-//         }
-//     }
-// }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 #[serde(deny_unknown_fields)]
