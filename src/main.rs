@@ -15,13 +15,13 @@ mod options;
 mod slogger;
 
 use actix_slog::StructuredLogger;
-use actix_web::{web, App, HttpServer};
+use actix_web::{middleware, web, App, HttpServer};
 use handlers::base::v2;
 use handlers::blob::{check_blob, delete_blob, fetch_blob};
 use handlers::init_blob_upload::init_upload;
 use handlers::manifest::{delete_manifest, get_manifest, head_manifest, put_manifest};
 use handlers::tags::tags_list;
-use handlers::AppState;
+use handlers::{AppState, DISTRIBUTION_API_VERSION, RUSTRIBUTION_VERSION};
 use options::Options;
 use storage::factory as StorageFactory;
 use structopt::StructOpt;
@@ -48,6 +48,11 @@ async fn main() -> std::io::Result<()> {
             })
             .data(config.clone())
             .wrap(StructuredLogger::new(logger.new(o!())))
+            .wrap(
+                middleware::DefaultHeaders::default()
+                    .header(DISTRIBUTION_API_VERSION, "registry/2.0")
+                    .header(RUSTRIBUTION_VERSION, crate_version!()),
+            )
             .service(
                 web::scope("/v2")
                     // tags

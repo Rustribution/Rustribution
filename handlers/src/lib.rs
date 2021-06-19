@@ -15,6 +15,9 @@ pub mod manifest;
 pub mod media_types;
 pub mod tags;
 
+pub static DISTRIBUTION_API_VERSION: &str = "Docker-Distribution-Api-Version";
+pub static RUSTRIBUTION_VERSION: &str = "Rustribution-Version";
+
 #[derive(Clone)]
 pub struct AppState {
     pub logger: Logger,
