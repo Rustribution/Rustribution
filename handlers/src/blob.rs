@@ -53,15 +53,25 @@ pub async fn fetch_blob(
 /// Check Blob
 /// Check the blob from the registry identified by digest.
 #[head("/{name:.*}/blobs/{digest}")]
-pub async fn check_blob(data: web::Data<AppState>, info: web::Path<NameDigest>) -> impl Responder {
+pub async fn check_blob(
+    data: web::Data<AppState>,
+    info: web::Path<NameDigest>,
+    payload: web::Payload,
+) -> impl Responder {
     info!(
         data.logger,
         "[BLOB.CHECK]";"name"=>&info.name,"digest"=>&info.digest,
     );
 
+    // TODO: retrive blob's size.
+    // It used for put manifest.
+    let size: u64 = 123456;
     HttpResponse::Ok()
         .header("Docker-Content-Digest", info.digest.to_string())
-        .body("")
+        .header("Etag", format!(r#""{}""#, info.digest.to_string()))
+        .content_type("application/octet-stream")
+        .no_chunking(size)
+        .streaming(payload)
 }
 
 // TODO
