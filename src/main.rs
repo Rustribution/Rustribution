@@ -16,6 +16,7 @@ mod slogger;
 
 use actix_slog::StructuredLogger;
 use actix_web::{middleware, web, App, HttpServer};
+use actix_web_prom::PrometheusMetricsBuilder;
 use handlers::base::v2;
 use handlers::blob::{check_blob, delete_blob, fetch_blob};
 use handlers::init_blob_upload::init_upload;
@@ -38,6 +39,12 @@ async fn main() -> std::io::Result<()> {
     let backend = StorageFactory::new_backend(config.clone().storage, location_logger.clone())?;
     info!(location_logger, "backend info {}", backend.info());
 
+    // default metrics
+    let prometheus = PrometheusMetricsBuilder::new("api")
+        .endpoint(&config.clone().http.prometheus.unwrap().path)
+        .build()
+        .unwrap();
+
     let cfg = config.clone();
     HttpServer::new(move || {
         App::new()
@@ -47,6 +54,10 @@ async fn main() -> std::io::Result<()> {
                 backend: backend.clone(),
             })
             .data(config.clone())
+            .wrap(middleware::Condition::new(
+                config.clone().http.prometheus.unwrap().enabled,
+                prometheus.clone(),
+            ))
             .wrap(StructuredLogger::new(logger.new(o!())))
             .wrap(
                 middleware::DefaultHeaders::default()
