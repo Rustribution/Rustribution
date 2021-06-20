@@ -46,7 +46,11 @@ async fn main() -> std::io::Result<()> {
     debug!(location_logger,"";"storage.backend_type"=>config.storage.clone().backend_type);
 
     let backend = StorageFactory::new_backend(config.storage.clone(), location_logger.clone())?;
-    info!(location_logger, "backend info {}", backend.info());
+    info!(
+        location_logger,
+        "backend info {}",
+        backend.lock().unwrap().info()
+    );
 
     // default metrics
     let prometheus = PrometheusMetricsBuilder::new("api")
