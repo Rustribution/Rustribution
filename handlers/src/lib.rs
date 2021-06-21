@@ -4,6 +4,8 @@ extern crate slog;
 extern crate std;
 #[macro_use]
 extern crate custom_error;
+#[macro_use]
+extern crate more_asserts;
 
 use chrono::prelude::NaiveDateTime;
 use serde::{de, Deserialize, Deserializer};
@@ -30,6 +32,7 @@ pub static DATATIME_FMT: &str = "%Y-%m-%dT%H:%M:%S.%f";
 pub struct AppState {
     pub logger: Logger,
     // pub config: config::Config,
+    pub http_secret: String,
     pub backend: Arc<Mutex<dyn BlobBackend + Send + Sync>>,
 }
 
@@ -72,3 +75,11 @@ where
     NaiveDateTime::parse_from_str(&s, DATATIME_FMT).map_err(de::Error::custom)
 }
 
+pub fn build_blob_path(name: String, digest: String) -> String {
+    format!(
+        "/v2/{}/blobs/sha256/{}/{}/data",
+        name,
+        digest[0..1].to_string(),
+        digest
+    )
+}

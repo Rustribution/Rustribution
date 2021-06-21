@@ -30,8 +30,12 @@ pub struct UploadStater(String);
 
 /// UploadStater: Pack and unpack `BlobUploadState` with `Secret` String.
 impl UploadStater {
+    pub fn new(key: String) -> UploadStater {
+        UploadStater(key)
+    }
+
     pub fn pack(&self, bus: BlobUploadState) -> Result<String, HandlerError> {
-        assert_eq!(self.0.len(), 32);
+        assert_gt!(self.0.len(), 32);
 
         let json = serde_json::to_vec(&bus).ok();
 

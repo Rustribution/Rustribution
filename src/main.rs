@@ -28,6 +28,7 @@ use options::Options;
 use slog::Logger;
 use storage::factory as StorageFactory;
 use structopt::StructOpt;
+use uuid::Uuid;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -58,15 +59,29 @@ async fn main() -> std::io::Result<()> {
         .build()
         .unwrap();
 
+    let http_secret: String;
+    match config.clone().http.secret {
+        Some(secret) => http_secret = secret,
+        None => {
+            http_secret = Uuid::new_v4().to_string();
+            warn!(location_logger,
+                "No HTTP secret provided - generated random secret. This may cause problems with uploads if multiple registries are behind a load-balancer. To provide a shared secret, fill in http.secret in the configuration file.";
+                "http_secret"=>http_secret.clone(),
+            )
+        }
+    }
+
     let addr = config.http.addr.clone();
     HttpServer::new(move || {
         App::new()
             .data(AppState {
+                http_secret: http_secret.clone(),
                 logger: location_logger.clone(),
                 // config: config.clone(),
                 backend: backend.clone(),
             })
             .data(config.clone())
+            .app_data(web::PayloadConfig::new(1000000 * 250))
             .wrap(middleware::Condition::new(
                 config.clone().http.prometheus.unwrap().enabled,
                 prometheus.clone(),

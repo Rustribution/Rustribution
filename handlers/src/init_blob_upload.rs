@@ -1,5 +1,7 @@
-use crate::{AppState, QueryDigest, QueryMount};
+use crate::hmac::{BlobUploadState, UploadStater};
+use crate::{AppState, QueryDigest, QueryMount, DATATIME_FMT};
 use actix_web::{post, web, HttpResponse, Responder};
+use chrono::prelude::NaiveDateTime;
 use uuid::Uuid;
 
 #[post("/{name:.*}/blobs/uploads/")]
@@ -56,8 +58,22 @@ fn resumable_upload(data: web::Data<AppState>, name: String) -> HttpResponse {
     );
 
     let id = Uuid::new_v4().to_string();
-    HttpResponse::Created()
+    let state = BlobUploadState {
+        name: name.clone(),
+        offset: 0,
+        uuid: id.clone(),
+        started_at: NaiveDateTime::parse_from_str("2021-06-19T06:36:04.97859", DATATIME_FMT)
+            .unwrap(),
+    };
+    let statestr = UploadStater::new(data.http_secret.clone())
+        .pack(state)
+        .unwrap();
+    HttpResponse::Accepted()
         .header("Range", "0-0")
+        .header(
+            "Location",
+            format!("/v2/{}/blobs/uploads/{}?_state={}", name, id, statestr),
+        )
         .header("Docker-Upload-UUID", id)
         .body("")
 }

@@ -43,6 +43,7 @@ pub struct HttpCfg {
     pub compress: Option<bool>,
     pub debug_addr: Option<String>,
     pub prometheus: Option<PrometheusCfg>,
+    pub secret: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]

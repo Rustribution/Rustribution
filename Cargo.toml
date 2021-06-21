@@ -25,6 +25,7 @@ slog-term = "2.8.0"
 storage = {path = "storage", features = ["backend-mem", "backend-filesystem"]}
 structopt = "0.3"
 toml = "0.5.8"
+uuid = {version = "0.8", features = ["v4"]}
 
 [workspace]
 members = ["storage", "handlers"]
