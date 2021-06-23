@@ -60,7 +60,7 @@ impl UploadStater {
     }
 
     pub fn unpack(self, token: String) -> Result<BlobUploadState, HandlerError> {
-        assert_eq!(self.0.len(), 32);
+        assert_gt!(self.0.len(), 32);
 
         let token_bytes = decode_config(&token, URL_SAFE).ok();
         if token_bytes == None {

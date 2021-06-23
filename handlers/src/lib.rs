@@ -59,6 +59,11 @@ pub struct QueryDigest {
     digest: Option<String>,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct QueryState {
+    _state: String,
+}
+
 /// mount: digest
 /// form: repository name
 #[derive(Deserialize)]
@@ -75,11 +80,11 @@ where
     NaiveDateTime::parse_from_str(&s, DATATIME_FMT).map_err(de::Error::custom)
 }
 
-pub fn build_blob_path(name: String, digest: String) -> String {
-    format!(
-        "/v2/{}/blobs/sha256/{}/{}/data",
-        name,
-        digest[0..1].to_string(),
-        digest
-    )
+pub fn build_blob_temp_upload_path(name: String, uuid: String) -> String {
+    format!("/v2/repos/{}/_uploads/{}", name, uuid)
+}
+
+pub fn build_blob_path(digest: String) -> String {
+    assert_eq!(digest.len(), 71);
+    format!("/v2/blobs/sha256/{}/{}", digest[7..9].to_string(), digest)
 }

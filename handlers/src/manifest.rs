@@ -1,3 +1,4 @@
+use crate::build_blob_path;
 use crate::media_types::MediaType;
 use crate::{AppState, NameReference};
 use actix_web::{delete, get, head, http, put, web, HttpRequest, HttpResponse, Responder};
@@ -5,7 +6,6 @@ use bytes::Buf;
 use bytes::Bytes;
 use sha256::digest as Sha256;
 
-// TODO: get manifest
 /// GET Manifest
 /// Fetch the manifest identified by name and reference where reference can be a tag or digest.
 #[get("/{name:.*}/manifests/{reference}")]
@@ -13,22 +13,49 @@ pub async fn get_manifest(
     data: web::Data<AppState>,
     info: web::Path<NameReference>,
 ) -> impl Responder {
+    let mut digest: String = String::new();
+    if info.reference.len() == 71 && &info.reference[0..7].as_ref() == b"sha256:" {
+        digest = info.reference.clone();
+    } else {
+        // TODO: get digest by tag
+    }
+
     info!(
         data.logger,
-        "[MANIFEST.DOWNLOAD]";"name"=>&info.name,"reference"=>&info.reference,
+        "[MANIFEST.DOWNLOAD]";
+        "name"=>&info.name,
+        "reference"=>&info.reference,
+        "reference.length"=>&info.reference.len(),
+        "digest"=>digest.clone(),
+        "info.reference.len()"=>info.reference.len(),
     );
 
     // TODO: if Accept header not include OCI, but Manifest is OCI format, return 404.
 
-    // TODO: get digest
-    let digest = "";
+    let blobpath = build_blob_path(digest.clone());
+    let backend = data.backend.lock().unwrap();
+
+    let (exsit, _) = backend.stat(blobpath.clone());
+    if !exsit {
+        return HttpResponse::NotFound()
+            .header("Docker-Content-Digest", digest.clone())
+            .finish();
+    }
+
+    let content = backend.get_content(blobpath.clone());
+    debug!(
+        data.logger,"";
+        "blobpath"=>blobpath.clone(),
+        "digest"=>digest.clone(),
+        "content.length"=>content.len(),
+    );
+
     HttpResponse::Ok()
         .header("Content-Type", MediaType::ManifestV2.to_str())
         .header("Docker-Content-Digest", digest)
-        .body("{}")
+        .body(content)
 }
 
-// TODO: check manifest
 /// HEAD Manifest
 /// Check is the manifest is exists.
 #[head("/{name:.*}/manifests/{reference}")]
@@ -50,7 +77,6 @@ pub async fn head_manifest(
         .body("")
 }
 
-// TODO:
 /// PUT Manifest
 /// Put the manifest identified by name and reference where reference can be a tag or digest.
 /// Will validates and stores a manifest in the registry.
@@ -98,7 +124,12 @@ pub async fn put_manifest(
         }
     }
 
-    let digest = Sha256(body_str);
+    let digest = format!("sha256:{}", Sha256(body_str));
+    data.backend
+        .lock()
+        .unwrap()
+        .put_content(build_blob_path(digest.clone()), body.clone());
+
     debug!(
         data.logger,
         "[MANIFEST.PUT]";"body"=>body_str,"digest"=>digest.clone(),
@@ -106,7 +137,7 @@ pub async fn put_manifest(
 
     HttpResponse::Created()
         .header("Location", "") // TODO: The canonical location url of the uploaded manifest.
-        .header("Docker-Content-Digest", format!("sha256:{}", digest))
+        .header("Docker-Content-Digest", digest)
         .header("Content-Length", "0") // !!! Must be zero
         .body("") // !!! Must be empty
 }
