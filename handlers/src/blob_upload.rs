@@ -3,7 +3,6 @@ use crate::{build_blob_path, build_blob_temp_upload_path};
 use crate::{AppState, NameUUID, QueryDigest, QueryState, DOCKER_UPLOAD_UUID};
 use actix_web::{delete, get, http, patch, put, web, HttpRequest, HttpResponse};
 use bytes::Bytes;
-// use chrono::prelude::NaiveDateTime;
 
 // TODO
 /// GET Blob Upload
@@ -43,11 +42,6 @@ pub async fn stream_upload(
   //   .unwrap()
   //   .to_str()
   //   .unwrap_or("");
-  info!(
-      data.logger,"[BLOBUPLOAD.CHUNK]";
-      "name"=>info.clone().name,
-      "uuid"=>info.clone().uuid,
-  );
 
   let length = req
     .headers()
@@ -59,6 +53,14 @@ pub async fn stream_upload(
     .unwrap_or(0);
 
   let size = body.len();
+
+  info!(
+      data.logger,"[BLOBUPLOAD.CHUNK]";
+      "name"=>info.clone().name,
+      "uuid"=>info.clone().uuid,
+      "body.size"=>&size,
+      "content.length"=>&length,
+  );
 
   if size < length {
     HttpResponse::BadRequest().body("client disconnected")
@@ -72,9 +74,18 @@ pub async fn stream_upload(
       .pack(state)
       .unwrap();
 
-    data.backend.lock().unwrap().put_content(
-      build_blob_temp_upload_path(info.name.clone(), info.uuid.clone()),
-      body,
+    let temp_path = build_blob_temp_upload_path(info.name.clone(), info.uuid.clone());
+    let backend = &data.backend;
+    backend.put_content(temp_path.clone(), body);
+    let temp_size = backend.stat(temp_path.clone()).unwrap_or(0);
+    debug!(
+      data.logger,
+      "upload chunk info";
+      "uuid"=>&info.uuid,
+      "name"=>&info.name,
+      "temp.path"=>temp_path,
+      "temp.size"=>temp_size,
+      "body.size"=>size,
     );
     HttpResponse::Accepted()
       .header(
@@ -107,11 +118,12 @@ pub async fn finish_upload(
       "uuid"=>info.clone().uuid,
       "digest"=>query.clone().digest
   );
-  data.backend.lock().unwrap().mov(
-    build_blob_temp_upload_path(info.clone().name, info.clone().uuid),
-    build_blob_path(query.clone().digest.unwrap_or(String::new())),
-  );
-  HttpResponse::Created().finish()
+  let src_path = build_blob_temp_upload_path(info.clone().name, info.clone().uuid);
+  let dst_path = build_blob_path(query.clone().digest.unwrap_or(String::new()));
+  match data.backend.mov(src_path, dst_path) {
+    Ok(_) => HttpResponse::Created().finish(),
+    Err(_) => HttpResponse::InternalServerError().finish(),
+  }
 }
 
 // TODO

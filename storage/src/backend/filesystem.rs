@@ -5,8 +5,7 @@ use bytes::Bytes;
 use fs_extra::file::{move_file, CopyOptions};
 use slog::Logger;
 use std::fs::{metadata, DirBuilder, File, OpenOptions};
-use std::io::Result;
-use std::io::{Read, Write};
+use std::io::{Read, Result, Write};
 
 #[derive(Debug, Clone)]
 pub struct Filesystem {
@@ -19,11 +18,20 @@ pub struct StorageFilesystemCfg {
     pub rootdir: String,
 }
 
-impl BlobBackend for Filesystem {
-    fn set_logger(&mut self, logger: Logger) {
-        self.logger = logger;
+impl Filesystem {
+    pub fn new(config: toml::value::Value, logger: Logger) -> Self {
+        info!(logger, "storage config: {:?}", config["filesystem"]);
+        let config: StorageFilesystemCfg = toml::from_str(
+            toml::to_string(&config["filesystem"].as_table())
+                .unwrap()
+                .as_str(),
+        )
+        .unwrap();
+        Filesystem { config, logger }
     }
+}
 
+impl BlobBackend for Filesystem {
     fn info(&self) -> String {
         format!(
             "[Filesystem storage config] rootdir: {}",
@@ -31,29 +39,32 @@ impl BlobBackend for Filesystem {
         )
     }
 
-    fn stat(&self, path: String) -> (bool, usize) {
-        let filepath = format!("{}/{}/data", self.config.rootdir, path);
+    fn stat(&self, path: String) -> Result<usize> {
+        let filepath = format!("{}{}/data", self.config.rootdir, path);
         let md = metadata(filepath);
         match md {
-            Ok(md) => (true, md.len() as usize),
-            Err(e) => {
-                error!(self.logger,"get file metadata failed";"error"=>e);
-                (false, 0)
-            }
+            Ok(md) => Ok(md.len() as usize),
+            Err(e) => Err(e),
         }
     }
 
-    fn get_content(&self, path: String) -> Bytes {
-        let mut file = File::open(format!("{}/{}/data", self.config.rootdir, path)).unwrap();
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).unwrap();
-        Bytes::from(data)
+    fn get_content(&self, path: String) -> Result<Bytes> {
+        match self.stat(path.clone()) {
+            Ok(_) => {
+                let mut file =
+                    File::open(format!("{}/{}/data", self.config.rootdir, path)).unwrap();
+                let mut data = Vec::new();
+                file.read_to_end(&mut data).unwrap();
+                Ok(Bytes::from(data))
+            }
+            Err(e) => Err(e),
+        }
     }
 
-    fn put_content(&mut self, path: String, data: Bytes) {
-        let dirpath = format!("{}/{}", self.config.rootdir, path);
+    fn put_content(&self, path: String, data: Bytes) {
+        let dirpath = format!("{}{}", self.config.rootdir, path);
         DirBuilder::new().recursive(true).create(dirpath).unwrap();
-        let filepath = format!("{}/{}/data", self.config.rootdir, path);
+        let filepath = format!("{}{}/data", self.config.rootdir, path);
         let file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -62,39 +73,41 @@ impl BlobBackend for Filesystem {
         file.unwrap().write_all(data.as_ref()).unwrap();
     }
 
-    fn mov(&self, src_path: String, dst_path: String) {
-        let dst_dir = format!("{}/{}", self.config.rootdir, dst_path);
-        DirBuilder::new().recursive(true).create(dst_dir).unwrap();
+    fn mov(&self, src_path: String, dst_path: String) -> Result<()> {
+        let dst_dir = format!("{}{}", self.config.rootdir, dst_path);
+        DirBuilder::new().recursive(true).create(dst_dir)?;
 
-        let src_file = format!("{}/{}/data", self.config.rootdir, src_path);
-        let dst_file = format!("{}/{}/data", self.config.rootdir, dst_path);
+        let src_file = format!("{}{}/data", self.config.rootdir, src_path);
+        let dst_file = format!("{}{}/data", self.config.rootdir, dst_path);
 
-        move_file(src_file, dst_file, &CopyOptions::new()).unwrap();
+        move_file(src_file, dst_file, &CopyOptions::new()).unwrap_or(0);
+        Ok(())
     }
 
-    fn delete(&self, path: String) {
-        let file = format!("{}/{}", self.config.rootdir, path);
-        let (exist, _) = self.stat(path.clone());
-        warn!(
-            self.logger,
-            "delete blob";
-            "file"=>file.clone(),
-            "exist"=>exist.clone(),
-        );
-        if exist {
-            std::fs::remove_dir_all(file).unwrap();
+    fn delete(&self, path: String) -> Result<()> {
+        let file = format!("{}/{}/data", self.config.rootdir, path);
+        match self.stat(path.clone()) {
+            Ok(size) => {
+                warn!(
+                    self.logger,
+                    "delete blob success";
+                    "size"=>size,
+                    "path"=>&path,
+                    "file"=>&file,
+                );
+                std::fs::remove_dir_all(file)
+            }
+            Err(e) => {
+                error!(
+                    self.logger,
+                    "delete blob failed";
+                    "path"=>&path,
+                    "file"=>&file,
+                    "error"=>&e,
+                );
+
+                Err(e)
+            }
         }
     }
-}
-
-pub fn new(config: toml::value::Value) -> Result<Filesystem> {
-    let logger = slog_scope::logger();
-    info!(logger, "storage config: {:?}", config["filesystem"]);
-    let config: StorageFilesystemCfg = toml::from_str(
-        toml::to_string(&config["filesystem"].as_table())
-            .unwrap()
-            .as_str(),
-    )
-    .unwrap();
-    Ok(Filesystem { config, logger })
 }

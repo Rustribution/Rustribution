@@ -5,4 +5,3 @@ extern crate serde;
 
 pub mod backend;
 pub mod factory;
-pub mod metadata;

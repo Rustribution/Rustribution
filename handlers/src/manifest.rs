@@ -1,10 +1,12 @@
 use crate::build_blob_path;
 use crate::media_types::MediaType;
+use crate::DOCKER_CONTENT_DIGEST;
 use crate::{AppState, NameReference};
 use actix_web::{delete, get, head, http, put, web, HttpRequest, HttpResponse, Responder};
 use bytes::Buf;
 use bytes::Bytes;
 use sha256::digest as Sha256;
+use std::io::ErrorKind::NotFound;
 
 /// GET Manifest
 /// Fetch the manifest identified by name and reference where reference can be a tag or digest.
@@ -33,27 +35,45 @@ pub async fn get_manifest(
     // TODO: if Accept header not include OCI, but Manifest is OCI format, return 404.
 
     let blobpath = build_blob_path(digest.clone());
-    let backend = data.backend.lock().unwrap();
+    let backend = &data.backend;
 
-    let (exsit, _) = backend.stat(blobpath.clone());
-    if !exsit {
-        return HttpResponse::NotFound()
-            .header("Docker-Content-Digest", digest.clone())
-            .finish();
+    match backend.get_content(blobpath.clone()) {
+        Ok(content) => {
+            debug!(
+                data.logger,"";
+                "blobpath"=>blobpath.clone(),
+                "digest"=>digest.clone(),
+                "content.length"=>content.len(),
+            );
+
+            HttpResponse::Ok()
+                .header("Content-Type", MediaType::ManifestV2.to_str())
+                .header(DOCKER_CONTENT_DIGEST, digest)
+                .body(content)
+        }
+        Err(e) => match e.kind() {
+            NotFound => {
+                warn!(
+                    data.logger,
+                    "get blob failed";
+                    "error"=> &e,
+                    "blobpath"=> blobpath,
+                );
+                return HttpResponse::NotFound()
+                    .header(DOCKER_CONTENT_DIGEST, digest.clone())
+                    .finish();
+            }
+            _ => {
+                error!(
+                    data.logger,
+                    "get blob failed";
+                    "error"=> &e,
+                    "blobpath"=> blobpath,
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
     }
-
-    let content = backend.get_content(blobpath.clone());
-    debug!(
-        data.logger,"";
-        "blobpath"=>blobpath.clone(),
-        "digest"=>digest.clone(),
-        "content.length"=>content.len(),
-    );
-
-    HttpResponse::Ok()
-        .header("Content-Type", MediaType::ManifestV2.to_str())
-        .header("Docker-Content-Digest", digest)
-        .body(content)
 }
 
 /// HEAD Manifest
@@ -73,7 +93,7 @@ pub async fn head_manifest(
     let digest = "";
     HttpResponse::Ok()
         .header("Content-Type", MediaType::ManifestV2.to_str())
-        .header("Docker-Content-Digest", digest)
+        .header(DOCKER_CONTENT_DIGEST, digest)
         .body("")
 }
 
@@ -126,8 +146,6 @@ pub async fn put_manifest(
 
     let digest = format!("sha256:{}", Sha256(body_str));
     data.backend
-        .lock()
-        .unwrap()
         .put_content(build_blob_path(digest.clone()), body.clone());
 
     debug!(
@@ -137,7 +155,7 @@ pub async fn put_manifest(
 
     HttpResponse::Created()
         .header("Location", "") // TODO: The canonical location url of the uploaded manifest.
-        .header("Docker-Content-Digest", digest)
+        .header(DOCKER_CONTENT_DIGEST, digest)
         .header("Content-Length", "0") // !!! Must be zero
         .body("") // !!! Must be empty
 }

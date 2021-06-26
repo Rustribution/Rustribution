@@ -1,6 +1,8 @@
+use crate::DOCKER_CONTENT_DIGEST;
 use crate::{build_blob_path, AppState, NameDigest};
 use actix_files::HttpRange;
 use actix_web::{delete, get, head, http, web, HttpRequest, HttpResponse, Responder};
+use std::io::ErrorKind::NotFound;
 
 /// Fetch Blob or Part
 /// Retrieve the blob from the registry identified by digest.
@@ -15,6 +17,7 @@ pub async fn fetch_blob(
         "[BLOB.FETCH]";"name"=>&info.name,"digest"=>&info.digest,
     );
 
+    let path = build_blob_path(info.digest.clone());
     let range_header = req.headers().get(http::header::RANGE);
     match range_header {
         Some(v) => {
@@ -35,20 +38,43 @@ pub async fn fetch_blob(
                         layer_size
                     ),
                 )
-                .header("Content-Type", "application/octet-stream")
-                .body("")
+                .content_type("application/octet-stream")
+                .finish()
         }
         None => {
-            let content = data
-                .backend
-                .lock()
-                .unwrap()
-                .get_content(build_blob_path(info.digest.clone()));
-            HttpResponse::Ok()
-                .header("Content-Length", "0") // TODO: Length of body
-                .header("Content-Type", "application/octet-stream")
-                .header("Docker-Content-Digest", info.digest.clone())
-                .body(content)
+            match data.backend.get_content(path.clone()) {
+                Ok(content) => {
+                    HttpResponse::Ok()
+                        .header("Content-Length", "0") // TODO: Length of body
+                        .content_type("application/octet-stream")
+                        .header(DOCKER_CONTENT_DIGEST, info.digest.clone())
+                        .body(content)
+                }
+                Err(e) => match e.kind() {
+                    NotFound => {
+                        warn!(
+                            data.logger,
+                            "get blob failed";
+                            "error"=> &e,
+                            "path"=> path,
+                        );
+
+                        HttpResponse::NotFound()
+                            .header(DOCKER_CONTENT_DIGEST, info.digest.clone())
+                            .finish()
+                    }
+                    _ => {
+                        error!(
+                            data.logger,
+                            "get blob failed";
+                            "error"=> &e,
+                            "path"=> path,
+                        );
+
+                        HttpResponse::InternalServerError().finish()
+                    }
+                },
+            }
         }
     }
 }
@@ -59,29 +85,47 @@ pub async fn fetch_blob(
 pub async fn check_blob(
     data: web::Data<AppState>,
     info: web::Path<NameDigest>,
-    payload: web::Payload,
+    _payload: web::Payload,
 ) -> impl Responder {
     let path = build_blob_path(info.digest.clone());
-    let (exist, size) = data.backend.lock().unwrap().stat(path);
-    info!(
-        data.logger,
-        "[BLOB.CHECK]";
-        "name"=>&info.name,
-        "digest"=>&info.digest,
-        "exist"=>exist,
-        "size"=>size,
-    );
 
-    if exist {
-        // It used for put manifest.
-        HttpResponse::Ok()
-            .header("Docker-Content-Digest", info.digest.to_string())
-            .header("Etag", format!(r#""{}""#, info.digest.to_string()))
-            .content_type("application/octet-stream")
-            .no_chunking(size as u64)
-            .streaming(payload)
-    } else {
-        HttpResponse::NotFound().finish()
+    match data.backend.stat(path) {
+        Ok(size) => {
+            info!(
+                data.logger,
+                "[BLOB.CHECK]";
+                "name"=>&info.name,
+                "digest"=>&info.digest,
+                "size"=>size,
+            );
+            HttpResponse::Ok()
+                .header(DOCKER_CONTENT_DIGEST, info.digest.to_string())
+                // .header("Etag", format!(r#""{}""#, info.digest.to_string()))
+                .content_type("application/octet-stream")
+                .no_chunking(size as u64)
+                .streaming(_payload)
+        }
+        Err(e) => match e.kind() {
+            NotFound => {
+                warn!(
+                    data.logger,
+                    "blob not found";
+                    "error"=> e,
+                );
+
+                HttpResponse::NotFound().finish()
+            }
+            _ => {
+                error!(
+                    data.logger,
+                    "check blob failed";
+                    "digest"=>info.digest.to_string(),
+                    "error"=> e,
+                );
+
+                HttpResponse::InternalServerError().finish()
+            }
+        },
     }
 }
 
@@ -91,23 +135,45 @@ pub async fn check_blob(
 pub async fn delete_blob(data: web::Data<AppState>, info: web::Path<NameDigest>) -> impl Responder {
     // TODO:
     let path = build_blob_path(info.digest.clone());
-    let backend = data.backend.lock().unwrap();
-    let (exist, _) = backend.stat(path.clone());
+    let backend = &data.backend;
 
-    info!(
-        data.logger,
-        "[BLOB.DELETE]";
-        "name"=>&info.name,
-        "digest"=>&info.digest,
-        "exist"=>exist.clone(),
-        "path"=>path.clone(),
-    );
+    match backend.delete(path.clone()) {
+        Ok(_) => {
+            info!(
+                data.logger,
+                "[BLOB.DELETE]";
+                "name"=>&info.name,
+                "digest"=>&info.digest,
+                "path"=>path.clone(),
+            );
+            return HttpResponse::Accepted()
+                .header(DOCKER_CONTENT_DIGEST, info.digest.clone())
+                .finish();
+        }
+        Err(e) => match e.kind() {
+            NotFound => {
+                warn!(
+                    data.logger,
+                    "remove blob failed";
+                    "name"=>&info.name,
+                    "digest"=>&info.digest,
+                    "path"=>path,
+                    "error"=> e,
+                );
+                return HttpResponse::NotFound().finish();
+            }
+            _ => {
+                error!(
+                    data.logger,
+                    "remove blob failed";
+                    "name"=>&info.name,
+                    "digest"=>&info.digest,
+                    "path"=>path,
+                    "error"=> e,
+                );
 
-    if !exist {
-        return HttpResponse::NotFound().finish();
-    }
-    backend.delete(path);
-    HttpResponse::Accepted()
-        .header("Docker-Content-Digest", info.digest.clone())
-        .finish()
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+    };
 }

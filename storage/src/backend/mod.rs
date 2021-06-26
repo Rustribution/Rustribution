@@ -4,7 +4,6 @@ pub mod filesystem;
 pub mod mem;
 
 use bytes::Bytes;
-use slog::Logger;
 use std::io::{Error, ErrorKind, Result};
 use toml::value::Value;
 
@@ -23,23 +22,25 @@ pub struct StorageCfg {
 }
 
 pub trait BlobBackend {
-    fn set_logger(&mut self, logger: Logger);
-
     fn info(&self) -> String;
 
-    fn get_content(&self, path: String) -> Bytes;
+    fn get_content(&self, path: String) -> Result<Bytes>;
 
-    fn put_content(&mut self, path: String, data: Bytes);
+    fn put_content(&self, path: String, data: Bytes);
 
-    fn stat(&self, _path: String) -> (bool, usize) {
-        (false, 0)
+    fn stat(&self, _path: String) -> Result<usize> {
+        Ok(0)
     }
 
     fn list(&self, _path: String) {}
 
-    fn mov(&self, _src_path: String, _dst_path: String) {}
+    fn mov(&self, _src_path: String, _dst_path: String) -> Result<()> {
+        Ok(())
+    }
 
-    fn delete(&self, _path: String) {}
+    fn delete(&self, _path: String) -> Result<()> {
+        Ok(())
+    }
 
     fn url_for(&self, _path: String) -> Result<String> {
         Err(Error::new(

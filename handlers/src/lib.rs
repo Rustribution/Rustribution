@@ -10,7 +10,7 @@ extern crate more_asserts;
 use chrono::prelude::NaiveDateTime;
 use serde::{de, Deserialize, Deserializer};
 use slog::Logger;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use storage::backend::BlobBackend;
 
 pub mod base;
@@ -24,16 +24,17 @@ pub mod media_types;
 pub mod tags;
 
 pub static DISTRIBUTION_API_VERSION: &str = "Docker-Distribution-Api-Version";
+pub static DOCKER_CONTENT_DIGEST: &str = "Docker-Content-Digest";
 pub static RUSTRIBUTION_VERSION: &str = "Rustribution-Version";
 pub static DOCKER_UPLOAD_UUID: &str = "Docker-Upload-UUID";
 pub static DATATIME_FMT: &str = "%Y-%m-%dT%H:%M:%S.%f";
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct AppState {
     pub logger: Logger,
     // pub config: config::Config,
     pub http_secret: String,
-    pub backend: Arc<Mutex<dyn BlobBackend + Send + Sync>>,
+    pub backend: Arc<dyn BlobBackend + Send + Sync>,
 }
 
 #[derive(Deserialize)]
