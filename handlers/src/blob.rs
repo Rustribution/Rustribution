@@ -100,7 +100,8 @@ pub async fn check_blob(
             );
             HttpResponse::Ok()
                 .header(DOCKER_CONTENT_DIGEST, info.digest.to_string())
-                // .header("Etag", format!(r#""{}""#, info.digest.to_string()))
+                .header("Etag", format!(r#""{}""#, info.digest.to_string()))
+                .header("Accept-Ranges", "bytes")
                 .content_type("application/octet-stream")
                 .no_chunking(size as u64)
                 .streaming(_payload)

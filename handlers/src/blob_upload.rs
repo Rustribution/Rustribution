@@ -1,4 +1,5 @@
 use crate::hmac::UploadStater;
+use crate::DOCKER_CONTENT_DIGEST;
 use crate::{build_blob_path, build_blob_temp_upload_path};
 use crate::{AppState, NameUUID, QueryDigest, QueryState, DOCKER_UPLOAD_UUID};
 use actix_web::{delete, get, http, patch, put, web, HttpRequest, HttpResponse};
@@ -97,7 +98,7 @@ pub async fn stream_upload(
           statestr
         ),
       )
-      .header("Range", format!("0-{}", size))
+      .header("Range", format!("0-{}", size - 1))
       .header(http::header::CONTENT_LENGTH, "0")
       .header(crate::DOCKER_UPLOAD_UUID, info.uuid.clone())
       .finish()
@@ -111,17 +112,34 @@ pub async fn finish_upload(
   data: web::Data<AppState>,
   info: web::Path<NameUUID>,
   query: web::Query<QueryDigest>,
+  req: HttpRequest,
 ) -> HttpResponse {
+  let length = req
+    .headers()
+    .get(http::header::CONTENT_LENGTH)
+    .unwrap_or(&http::HeaderValue::from_str("0").unwrap())
+    .to_str()
+    .unwrap_or("")
+    .parse::<usize>()
+    .unwrap_or(0);
+
+  let digest = query.clone().digest.unwrap_or(String::new());
+
   info!(
       data.logger,"[BLOBUPLOAD.FINISH]";
       "name"=>info.clone().name,
       "uuid"=>info.clone().uuid,
-      "digest"=>query.clone().digest
+      "digest"=>&digest,
+      "content.length"=>&length,
   );
   let src_path = build_blob_temp_upload_path(info.clone().name, info.clone().uuid);
-  let dst_path = build_blob_path(query.clone().digest.unwrap_or(String::new()));
-  match data.backend.mov(src_path, dst_path) {
-    Ok(_) => HttpResponse::Created().finish(),
+  let dst_path = build_blob_path(digest.clone());
+  match data.backend.mov(src_path, dst_path.clone()) {
+    Ok(_) => HttpResponse::NoContent()
+      .header("Location", format!("/v2/{}/blobs/{}", info.name, digest))
+      .header("Content-Range", format!("0-{}", length))
+      .header(DOCKER_CONTENT_DIGEST, digest)
+      .finish(),
     Err(_) => HttpResponse::InternalServerError().finish(),
   }
 }
