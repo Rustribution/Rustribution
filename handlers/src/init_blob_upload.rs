@@ -3,6 +3,7 @@ use crate::hmac::{BlobUploadState, UploadStater};
 use crate::{AppState, QueryDigest, QueryMount, DATATIME_FMT};
 use crate::{DOCKER_CONTENT_DIGEST, DOCKER_UPLOAD_UUID};
 use actix_web::{post, web, HttpResponse, Responder};
+use bytes::Bytes;
 use chrono::prelude::NaiveDateTime;
 use std::io::ErrorKind;
 use uuid::Uuid;
@@ -13,6 +14,7 @@ pub async fn init_upload(
     name: web::Path<String>,
     query: web::Query<QueryDigest>,
     mount: web::Query<QueryMount>,
+    body: Bytes,
 ) -> impl Responder {
     let digest = query.clone().digest.unwrap_or(String::from(""));
     let mount_digest = mount.mount.clone().unwrap_or(String::from(""));
@@ -23,18 +25,22 @@ pub async fn init_upload(
         mount_from.is_empty(),
     );
     match conditions {
-        (false, true, true) => monolithic_upload(data, &name, &digest),
+        (false, true, true) => monolithic_upload(data, &name, &digest, body),
         (true, true, true) => resumable_upload(data, &name),
         (true, false, false) => mount_blob(data, &name, &mount_from, &mount_digest),
         _ => bad_init_upload(),
     }
 }
 
-fn monolithic_upload(data: web::Data<AppState>, name: &String, digest: &String) -> HttpResponse {
+fn monolithic_upload(
+    data: web::Data<AppState>,
+    name: &String,
+    digest: &String,
+    body: Bytes,
+) -> HttpResponse {
     // TODO: get Content-Length
     let id = Uuid::new_v4().to_string();
     let location = format!("/v2/{}/blobs/uploads/{}", name, id);
-
     info!(
         data.logger,
         "[BLOB.INIT.MONOLITHIC_UPLOAD]";
@@ -44,6 +50,8 @@ fn monolithic_upload(data: web::Data<AppState>, name: &String, digest: &String) 
         "location"=>&location,
     );
 
+    let path = build_blob_path(digest.clone());
+    data.backend.put_content(path, body);
     HttpResponse::Created()
         .header("Location", location) // TODO
         .header("Docker-Upload-UUID", id)
