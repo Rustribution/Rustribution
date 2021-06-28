@@ -35,7 +35,7 @@ impl UploadStater {
     }
 
     pub fn pack(&self, bus: BlobUploadState) -> Result<String, HandlerError> {
-        assert_gt!(self.0.len(), 32);
+        assert_ge!(self.0.len(), 32);
 
         let json = serde_json::to_vec(&bus).ok();
 
@@ -60,7 +60,7 @@ impl UploadStater {
     }
 
     pub fn unpack(self, token: String) -> Result<BlobUploadState, HandlerError> {
-        assert_gt!(self.0.len(), 32);
+        assert_ge!(self.0.len(), 32);
 
         let token_bytes = decode_config(&token, URL_SAFE).ok();
         if token_bytes == None {
