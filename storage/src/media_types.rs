@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub enum MediaType {
   None,            // Not support
   ManifestV1,      // schema1 (existing manifest format)
