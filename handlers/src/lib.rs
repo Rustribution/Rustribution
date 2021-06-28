@@ -20,7 +20,6 @@ pub mod errors;
 pub mod hmac;
 pub mod init_blob_upload;
 pub mod manifest;
-pub mod media_types;
 pub mod tags;
 
 pub static DISTRIBUTION_API_VERSION: &str = "Docker-Distribution-Api-Version";

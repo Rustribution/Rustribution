@@ -1,5 +1,4 @@
 use crate::build_blob_path;
-use crate::media_types::MediaType;
 use crate::DOCKER_CONTENT_DIGEST;
 use crate::{AppState, NameReference};
 use actix_web::{delete, get, head, http, put, web, HttpRequest, HttpResponse, Responder};
@@ -7,6 +6,7 @@ use bytes::Buf;
 use bytes::Bytes;
 use sha256::digest as Sha256;
 use std::io::ErrorKind::NotFound;
+use storage::media_types::MediaType;
 
 /// GET Manifest
 /// Fetch the manifest identified by name and reference where reference can be a tag or digest.
