@@ -154,9 +154,9 @@ pub async fn put_manifest(
     );
 
     HttpResponse::Created()
-        .header("Location", "") // TODO: The canonical location url of the uploaded manifest.
+        .header(http::header::LOCATION, "") // TODO: The canonical location url of the uploaded manifest.
         .header(DOCKER_CONTENT_DIGEST, digest)
-        .header("Content-Length", "0") // !!! Must be zero
+        .header(http::header::CONTENT_LENGTH, "0") // !!! Must be zero
         .body("") // !!! Must be empty
 }
 

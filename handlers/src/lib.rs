@@ -7,6 +7,8 @@ extern crate custom_error;
 #[macro_use]
 extern crate more_asserts;
 
+mod utils;
+
 use chrono::prelude::NaiveDateTime;
 use serde::{de, Deserialize, Deserializer};
 use slog::Logger;

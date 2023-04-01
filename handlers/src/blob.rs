@@ -28,9 +28,9 @@ pub async fn fetch_blob(
             info!(data.logger, "BLOB.FETCH.PART";"name"=>&info.name,"digest"=>&info.digest,
             "range_header"=>vstr, "range.start"=>range.start,"range.length"=>range.length);
             HttpResponse::PartialContent()
-                .header("Content-Length", range.length) // TODO: Length of body
+                .header(http::header::CONTENT_LENGTH, range.length) // TODO: Length of body
                 .header(
-                    "Content-Range",
+                    http::header::CONTENT_RANGE,
                     format!(
                         "bytes {}-{}/{}",
                         range.start,
@@ -45,7 +45,7 @@ pub async fn fetch_blob(
             match data.backend.get_content(path.clone()) {
                 Ok(content) => {
                     HttpResponse::Ok()
-                        .header("Content-Length", "0") // TODO: Length of body
+                        .header(http::header::CONTENT_LENGTH, "0") // TODO: Length of body
                         .content_type("application/octet-stream")
                         .header(DOCKER_CONTENT_DIGEST, info.digest.clone())
                         .body(content)
@@ -100,8 +100,11 @@ pub async fn check_blob(
             );
             HttpResponse::Ok()
                 .header(DOCKER_CONTENT_DIGEST, info.digest.to_string())
-                .header("Etag", format!(r#""{}""#, info.digest.to_string()))
-                .header("Accept-Ranges", "bytes")
+                .header(
+                    http::header::ETAG,
+                    format!(r#""{}""#, info.digest.to_string()),
+                )
+                .header(http::header::ACCEPT_RANGES, "bytes")
                 .content_type("application/octet-stream")
                 .no_chunking(size as u64)
                 .streaming(_payload)

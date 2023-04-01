@@ -1,8 +1,9 @@
 use crate::build_blob_path;
 use crate::hmac::{BlobUploadState, UploadStater};
+use crate::utils;
 use crate::{AppState, QueryDigest, QueryMount, DATATIME_FMT};
 use crate::{DOCKER_CONTENT_DIGEST, DOCKER_UPLOAD_UUID};
-use actix_web::{post, web, HttpResponse, Responder};
+use actix_web::{http, post, web, HttpRequest, HttpResponse, Responder};
 use bytes::Bytes;
 use chrono::prelude::NaiveDateTime;
 use std::io::ErrorKind;
@@ -14,6 +15,7 @@ pub async fn init_upload(
     name: web::Path<String>,
     query: web::Query<QueryDigest>,
     mount: web::Query<QueryMount>,
+    req: HttpRequest,
     body: Bytes,
 ) -> impl Responder {
     let digest = query.clone().digest.unwrap_or(String::from(""));
@@ -24,8 +26,13 @@ pub async fn init_upload(
         mount_digest.is_empty(),
         mount_from.is_empty(),
     );
+    info!(
+        data.logger,"[BLOB.INIT.UPLOAD]";
+        "conditions"=>format!("{:?}",conditions),
+        "header"=>format!("{:?}",req.headers()),
+    );
     match conditions {
-        (false, true, true) => monolithic_upload(data, &name, &digest, body),
+        (false, true, true) => monolithic_upload(data, &name, &digest, req, body),
         (true, true, true) => resumable_upload(data, &name),
         (true, false, false) => mount_blob(data, &name, &mount_from, &mount_digest),
         _ => bad_init_upload(),
@@ -36,9 +43,12 @@ fn monolithic_upload(
     data: web::Data<AppState>,
     name: &String,
     digest: &String,
+    req: HttpRequest,
     body: Bytes,
 ) -> HttpResponse {
-    // TODO: get Content-Length
+    let body_size = body.len();
+    let length = utils::get_content_length(req.headers());
+
     let id = Uuid::new_v4().to_string();
     let location = format!("/v2/{}/blobs/uploads/{}", name, id);
     info!(
@@ -49,11 +59,20 @@ fn monolithic_upload(
         "session"=>&id,
         "location"=>&location,
     );
+    if body_size != length {
+        error!(
+            data.logger,
+            "body size not equal content-length header";
+            "body.size"=>body_size,
+            "content.length"=>length,
+        );
+        return HttpResponse::BadRequest().body("");
+    }
 
     let path = build_blob_path(digest.clone());
     data.backend.put_content(path, body);
     HttpResponse::Created()
-        .header("Location", location) // TODO
+        .header(http::header::LOCATION, location) // TODO
         .header("Docker-Upload-UUID", id)
         .body("")
 }
@@ -79,7 +98,6 @@ fn resumable_upload(data: web::Data<AppState>, name: &String) -> HttpResponse {
         .pack(state)
         .unwrap();
     HttpResponse::Accepted()
-        .header("Range", "0-0")
         .header(
             "Location",
             format!("/v2/{}/blobs/uploads/{}?_state={}", name, &id, statestr),

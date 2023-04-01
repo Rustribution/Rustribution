@@ -44,13 +44,10 @@ impl BlobBackend for Mem {
         // self.blobs.insert(path, data);
     }
 
-    // fn read(&self, path: String) {}
-
-    // fn write(&self, path: String) {}
-
-    // fn list(&self, path: String) {}
-
-    // fn mov(&self, src_path: String, dst_path: String) {}
-
-    // fn delete(&self, path: String) {}
+    fn delete(&self, path: String) -> Result<()> {
+        info!(self.logger, "delete blob";
+            "path"=>&path,
+        );
+        Ok(())
+    }
 }

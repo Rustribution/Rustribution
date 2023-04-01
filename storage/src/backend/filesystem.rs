@@ -2,6 +2,7 @@ extern crate fs_extra;
 
 use crate::backend::BlobBackend;
 use bytes::Bytes;
+use fs_extra::dir::remove as rmdir;
 use fs_extra::file::{move_file, CopyOptions};
 use slog::Logger;
 use std::fs::{metadata, DirBuilder, File, OpenOptions};
@@ -74,13 +75,15 @@ impl BlobBackend for Filesystem {
     }
 
     fn mov(&self, src_path: String, dst_path: String) -> Result<()> {
+        let src_dir = format!("{}{}", self.config.rootdir, src_path);
         let dst_dir = format!("{}{}", self.config.rootdir, dst_path);
         DirBuilder::new().recursive(true).create(dst_dir)?;
 
-        let src_file = format!("{}{}/data", self.config.rootdir, src_path);
+        let src_file = format!("{}/data", src_dir);
         let dst_file = format!("{}{}/data", self.config.rootdir, dst_path);
 
         move_file(src_file, dst_file, &CopyOptions::new()).unwrap_or(0);
+        rmdir(src_dir).unwrap();
         Ok(())
     }
 
